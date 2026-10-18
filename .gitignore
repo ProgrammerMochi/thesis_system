@@ -1,0 +1,20 @@
+# Data never goes in git: Kaggle licences, and self-collected messages
+# are personal data even after masking (RA 10173).
+data/
+*.csv
+# Model weights live on Kaggle Models / a private HF repo, not in git.
+*.bin
+*.safetensors
+*.onnx
+*.pt
+checkpoints/
+__pycache__/
+.venv/
+.ipynb_checkpoints/
+.env
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk

@@ -1,0 +1,6 @@
+# Increment 1. Pin exact versions on Kaggle with `pip freeze` and commit
+# the frozen file; reproducibility is part of the methodology.
+pandas
+numpy
+scikit-learn
+pytest
