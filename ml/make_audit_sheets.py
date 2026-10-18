@@ -19,8 +19,9 @@ Design (state this in Section 3.6.4):
 - Each person therefore labels 60 messages. Shared and individual items are
   shuffled together, so nobody can tell which items everyone else also has.
 - Sheets contain msg_id and text only: no AI label, no source label.
-- Low-confidence and unclassifiable AI items go to adjudication, split
-  across three pairs; each pair labels its items together and agrees.
+- Low-confidence, unclassifiable, and AI-vs-source-label conflict items go
+  to adjudication, split across three pairs; each pair labels its items
+  together and agrees.
 """
 from __future__ import annotations
 
@@ -78,10 +79,22 @@ def main() -> None:
     key = pd.concat([shared, indiv])[["msg_id", "set", "annotator", "ai_label"]]
     key.to_csv(AUD / "human_sample_key_DO_NOT_SHARE.csv", index=False)
 
-    # Adjudication: items the AI was unsure about, excluding ones already in
-    # the human sample (those get human labels anyway).
-    adj = df[(df["ai_confidence"] == "low") | (df["ai_label"] == "unclassifiable")]
-    adj = adj[~adj["msg_id"].isin(key["msg_id"])].sample(frac=1, random_state=SEED)
+    # Adjudication set (sheets show text only, never labels or source):
+    #  (a) the AI was unsure (low confidence) or gave up (unclassifiable);
+    #  (b) the AI's binary call (legitimate vs not) contradicts the source
+    #      dataset label. These are the highest-impact labels, because they
+    #      flip a message between the positive and negative training class
+    #      (Section 3.6.4: any human label supersedes the AI label).
+    # Items already in the human sample are excluded: they have human labels.
+    src = pd.read_csv(AUD / "audit_key_DO_NOT_SHARE.csv", dtype=str)[["msg_id", "label_source"]]
+    df = df.merge(src, on="msg_id", how="left")
+    ai_pos = (df["ai_label"] != "legitimate").astype(int)
+    conflict = ai_pos != df["label_source"].astype(int)
+    unsure = (df["ai_confidence"] == "low") | (df["ai_label"] == "unclassifiable")
+    adj = df[(unsure | conflict) & ~df["msg_id"].isin(key["msg_id"])]
+    adj = adj.sample(frac=1, random_state=SEED)
+    print(f"  adjudication: {int(unsure.sum())} unsure + {int(conflict.sum())} "
+          f"source-vs-AI conflicts (overlap counted once)")
     pairs = ["AB", "CD", "EF"]
     for i, pr in enumerate(pairs):
         part = adj.iloc[i::3][["msg_id", "text_norm"]].rename(columns={"text_norm": "text"})
