@@ -38,3 +38,14 @@ If `git pull` reports a conflict, stop and ask a lead developer.
     pip install -r requirements.txt
     python -m pytest tests/
     python ml/prepare_corpus.py        # dry run, prints corpus stats
+
+## Audit workflow (Section 3.6.4)
+
+    python ml/prepare_corpus.py --audit    # makes data/audit/audit_input_blind.csv
+    python ml/ai_prelabel.py batches       # 18 prompt files in data/audit/ai_batches/
+    # paste each into a NEW AI chat; save the reply as data/audit/ai_outputs/batch_XX.csv
+    python ml/ai_prelabel.py collect       # validates, writes data/audit/ai_labels.csv
+    python ml/make_audit_sheets.py         # one blind sheet per annotator
+    python ml/audit_agreement.py           # kappa, after the sheets are filled
+
+The person running the AI pre-labeling must not read ai_labels.csv.
