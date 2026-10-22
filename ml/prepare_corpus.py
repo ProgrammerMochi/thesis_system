@@ -76,7 +76,10 @@ def load_self_collected(path: Path) -> pd.DataFrame | None:
     df["source"] = "self"
     df["source_category"] = "smishing_collected"
     df["sender"] = ""
-    return df[["source", "source_category", "sender", "text"]]
+    # Optional column "label" (smishing/spam/legitimate/unclassifiable),
+    # assigned by the researcher pairs (Section 3.6.4).
+    df["self_label"] = df["label"].str.strip().str.lower() if "label" in df.columns else ""
+    return df[["source", "source_category", "sender", "text", "self_label"]]
 
 
 def build(verbose: bool = True) -> pd.DataFrame:
@@ -96,6 +99,10 @@ def build(verbose: bool = True) -> pd.DataFrame:
     df["label_source"] = np.where(
         df["source"] == "chua", df["source_category"].map(CHUA_MAP), 1
     ).astype(int)
+    is_self = df["source"] == "self"
+    if is_self.any():
+        df.loc[is_self, "label_source"] = (
+            df.loc[is_self, "self_label"].fillna("") != "legitimate").astype(int)
 
     # Within-source, then cross-source exact dedup on normalized text.
     # Conflicts (same text, different source labels) are kept once and
@@ -138,11 +145,38 @@ def build(verbose: bool = True) -> pd.DataFrame:
     return df
 
 
+def apply_final_labels(df: pd.DataFrame, require: bool) -> pd.DataFrame:
+    """Attach audited labels from data/audit/final_labels.csv (made by
+    ml/merge_labels.py). Without it, a dry run falls back to the PROVISIONAL
+    source labels and says so; --write refuses to run without it."""
+    f = ROOT / "data" / "audit" / "final_labels.csv"
+    if not f.exists():
+        if require:
+            sys.exit("data/audit/final_labels.csv not found. Finish the audit and run "
+                     "python ml/merge_labels.py first; the split must use audited labels.")
+        print("\nWARNING: no final_labels.csv; using PROVISIONAL source labels (dry run only).")
+        df["label3"] = ""
+        df["label_method"] = "provisional"
+        df["label_bin"] = df["label_source"]
+        return df
+    fl = pd.read_csv(f, dtype=str)[["msg_id", "label3", "label_method"]]
+    df = df.merge(fl, on="msg_id", how="left")
+    miss = df["label3"].isna().sum()
+    if miss:
+        sys.exit(f"{miss} corpus messages have no final label; rerun merge_labels.py.")
+    n_un = int((df["label3"] == "unclassifiable").sum())
+    df = df[df["label3"] != "unclassifiable"].reset_index(drop=True)
+    df["label_bin"] = df["label3"].isin(["smishing", "spam"]).astype(int)
+    print(f"\nAudited labels applied; {n_un} unclassifiable messages excluded.")
+    print(df.groupby(["label3"]).size().to_string())
+    return df
+
+
 def split(df: pd.DataFrame) -> pd.Series:
     """Template-grouped, label-stratified 70/15/15 split."""
     sgkf = StratifiedGroupKFold(n_splits=N_FOLDS, shuffle=True, random_state=SEED)
     fold = np.empty(len(df), dtype=int)
-    for k, (_, idx) in enumerate(sgkf.split(df, df["label_source"], df["template_id"])):
+    for k, (_, idx) in enumerate(sgkf.split(df, df["label_bin"], df["template_id"])):
         fold[idx] = k
     return pd.Series(
         np.select([fold < 14, fold < 17], ["train", "val"], "test"), index=df.index
@@ -180,6 +214,7 @@ def main() -> None:
     if args.audit:
         write_audit(df)
         return
+    df = apply_final_labels(df, require=args.write)
     df["split"] = split(df)
 
     # Leakage check: no template may appear in two splits.
@@ -187,7 +222,7 @@ def main() -> None:
     assert leak == 0, f"{leak} templates span multiple splits"
     print("\nSplit sizes and positive rate:")
     print(df.groupby("split").agg(n=("msg_id", "size"),
-                                  pos_rate=("label_source", "mean"),
+                                  pos_rate=("label_bin", "mean"),
                                   urls=("has_url", "sum")).round(3).to_string())
 
     if not args.write:
@@ -199,6 +234,7 @@ def main() -> None:
         sys.exit("data/processed/corpus.csv exists. The split is frozen; refusing to overwrite.")
     cols = ["msg_id", "source", "source_category", "sender", "text_norm", "text_model",
             "urls", "has_url", "n_chars", "template_id", "label_source",
+            "label3", "label_bin", "label_method",
             "label_conflict", "n_copies", "split"]
     df[cols].to_csv(OUT / "corpus.csv", index=False)
 

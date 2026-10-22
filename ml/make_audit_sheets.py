@@ -30,6 +30,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from textnorm import EMAIL_RE, PHONE_RE  # same patterns as the pipeline
+
+
 ROOT = Path(__file__).resolve().parents[1]
 AUD = ROOT / "data" / "audit"
 SEED = 7
@@ -37,6 +40,12 @@ PEOPLE = list("ABCDEF")
 CLASSES = ["smishing", "spam", "legitimate"]
 SHARED_PER_CLASS = 10
 INDIV_PER_PERSON_PER_CLASS = 10
+
+
+def redact(t: str) -> str:
+    """Sheets circulate by Drive, so mask contact details (RA 10173, Section
+    3.5.2). URLs and peso amounts are kept: C2/C3/C4 depend on them."""
+    return EMAIL_RE.sub("[EMAIL]", PHONE_RE.sub("[PHONE_NUM]", t))
 
 
 def main() -> None:
@@ -72,6 +81,7 @@ def main() -> None:
         mine = pd.concat([shared, indiv[indiv["annotator"] == p]])
         mine = mine.sample(frac=1, random_state=SEED + ord(p))
         sheet = mine[["msg_id", "text_norm"]].rename(columns={"text_norm": "text"})
+        sheet["text"] = sheet["text"].map(redact)
         sheet["label"] = ""   # smishing / spam / legitimate / unclassifiable
         sheet["notes"] = ""
         sheet.to_csv(out / f"annotator_{p}.csv", index=False)
@@ -98,6 +108,7 @@ def main() -> None:
     pairs = ["AB", "CD", "EF"]
     for i, pr in enumerate(pairs):
         part = adj.iloc[i::3][["msg_id", "text_norm"]].rename(columns={"text_norm": "text"})
+        part["text"] = part["text"].map(redact)
         part["agreed_label"] = ""
         part["notes"] = ""
         part.to_csv(out / f"adjudication_pair_{pr}.csv", index=False)

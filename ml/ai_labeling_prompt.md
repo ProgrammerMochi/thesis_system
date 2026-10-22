@@ -21,6 +21,7 @@ DECISION ORDER
 4. Otherwise, unclassifiable.
 
 RULES
+- C4 applies when the message ASSERTS that the recipient has already won, been credited, been selected, or holds a prize or ticket (for example "you've won", "credited to your number", "you're the lucky recipient", "you have a raffle ticket"). A plain offer that is conditional on the reader acting (for example "register and get a bonus", "deposit 100 and get 100") is spam, not C4.
 - Treat a domain as "official" only if it clearly belongs to a well-known institution (for example bdo.com.ph, gcash.com). If you cannot tell, treat it as non-official and lower your confidence.
 - Do not guess what the "real" label should be from the style of the message set. Judge each message on its own.
 - confidence: high = clear; medium = plausible alternative label; low = you would not be surprised if a human disagreed.
