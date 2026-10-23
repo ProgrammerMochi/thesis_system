@@ -1,0 +1,11 @@
+# Researcher-written benchmark messages (none from data/). One per line.
+# Mix of short, median and long lengths; contents are illustrative only.
+Kain na tayo mamaya.
+Tol, tuloy pa ba tayo bukas ng 6pm? Dala ka ng bola.
+Hi Ma, nakarating na ako sa bahay. Pakisabi kay Papa na tumawag ako kanina.
+Your OTP is 482910. Do not share this code with anyone. Your bank will never ask for your OTP.
+BDO Alert: Your account has been locked. Verify your details now at bdo-secure-verify.top/login to avoid suspension.
+Congratulations! Ikaw ay nanalo ng P50,000 sa raffle. I-claim na sa gcash-promo.icu/claim bago mag-expire ngayong araw.
+Hi po, need ng part-time worker, P3,000 per day, like lang ng videos sa social media. Walang puhunan. Message sa t.me/easyjob_ph para sa details.
+Promo alert! Get 50% off on all items this weekend only at our partner stores nationwide. Visit www.example-shop.ph for the list of branches, and present this SMS at the counter to avail. Offer valid until Sunday. Para sa iba pang detalye, tumawag sa aming hotline o bisitahin ang aming website. Salamat po at mabuhay!
+Paalala: ang inyong bill para sa buwang ito ay nakatakdang bayaran sa ika-25. Maaaring magbayad sa alinmang sangay o sa aming opisyal na app. Huwag pansinin kung nakabayad na. Salamat po sa patuloy na pagtitiwala. Para sa mga tanong, bisitahin ang aming opisyal na website o tumawag sa aming customer service hotline mula Lunes hanggang Biyernes, 8AM hanggang 5PM.
