@@ -49,3 +49,7 @@ If `git pull` reports a conflict, stop and ask a lead developer.
     python ml/audit_agreement.py           # kappa, after the sheets are filled
 
 The person running the AI pre-labeling must not read ai_labels.csv.
+
+## SHA-256 Hash of the corpus CSV
+   - 0e7f3c1d8a2b4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f (corpus.csv)
+   - 8489bff3527aee7e6132ef808347637930ec0ef3a7a9344cb737202a80362386 (corpus_kaggle.csv)
