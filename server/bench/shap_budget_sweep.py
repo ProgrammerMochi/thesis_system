@@ -376,11 +376,11 @@ def main(argv=None):
            "torch_threads": settings.torch_threads, "batch_size": settings.shap_batch_size}
     (args.out / "run.json").write_text(json.dumps(run, indent=2))
 
-    print("\nbudget  median_rho  top3  drop_k3  rand_k3  lat_med  lat_p95  evals")
+    print("\nbudget  median_rho  top3  mean_drop3  mean_rand3  lat_med  lat_p95  evals")
     for r in summary:
         f3 = lambda x: "  n/a " if x is None else f"{x:6.3f}"
         print(f"{r['budget']:6d}  {f3(r['median_spearman'])}    {f3(r['mean_top3_overlap'])} "
-              f"{f3(r['median_drop_k3'])}   {f3(r['mean_random_drop_k3'])}  "
+              f"{f3(r['mean_drop_k3'])}      {f3(r['mean_random_drop_k3'])}      "
               f"{r['median_seconds']:6.2f}s  {r['p95_seconds']:6.2f}s  {r['median_n_evals']:5.0f}")
     print(f"\nRule (fixed before results): smallest budget with median Spearman >= {SPEARMAN_MIN} "
           f"and p95 <= {P95_MAX_S} s")
