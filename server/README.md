@@ -25,6 +25,26 @@ Response fields: `verdict` (`malicious` or `legitimate`), `threat_probability`
 units of the text the phone sent, `weight` = SHAP value toward malicious),
 `url_flags`, plus `scores`, `decision`, `explanation`, `model_version`.
 
+## Two-call flow (verdict first, highlights second)
+
+Classification takes about 30 ms on the M1 laptop; SHAP takes up to about
+4.8 s (Oct 23 benchmark, `max_evals=256`). So the app asks twice, on the same
+endpoint:
+
+1. `POST /v1/analyze?explain=false` with `{"text": ...}` → show the verdict
+   and `threat_probability` right away. `text_attributions` is `[]` and
+   `explanation.computed` is `false`.
+2. `POST /v1/analyze` (explain defaults to true) with **the same text** →
+   draw the highlights from `text_attributions`.
+
+The server keeps no text between the calls (zero retention, Chapter 3
+Section 3.5.3), so the phone must resend it; there is no request ID to look
+up. Both calls return the same `verdict`, `threat_probability`, `scores`,
+`decision` and `url_flags` for the same text
+(`tests/server/test_two_call_flow.py`); only `text_attributions` and
+`explanation` differ. If call 2 fails or times out, the app keeps the verdict
+from call 1 and shows it without highlights.
+
 **Provisional:** the verdict uses p_text only with threshold 0.5. The
 validation-selected threshold and URL fusion come in Increment 2.
 
@@ -45,6 +65,7 @@ never echo input (FastAPI's default 422 body does, so it is replaced).
 
     python -m server.bench.latency --restarts 10 --warm 20 --out bench_latency.csv
 
-Reports process cold start, first-request cold start, and warm classification
-and SHAP times separately (median, p95, max). These are laptop demo numbers,
+Reports process cold start, first-request cold start, and the two headline
+numbers of the two-call flow: **time to verdict** (`explain=false`) and
+**time to highlights** (`explain=true`), each as median, p95 and max. These are laptop demo numbers,
 not the SOP 5 result, which must be measured on the deployed Cloud Run setup.
