@@ -110,3 +110,116 @@ def template_key(model_text: str) -> str:
     lowercase, every digit -> 0, whitespace collapsed."""
     t = re.sub(r"\d", "0", model_text.lower())
     return re.sub(r"\s+", " ", t).strip()
+
+
+# --- Offset tracking (server only) ----------------------------------------
+# The FastAPI server must report SHAP attributions as character offsets into
+# the text the phone sent (Chapter 3, Section 3.2.4), but the steps above
+# shift positions (whitespace collapsing, URL -> [LINK], masking). The
+# functions below replay EXACTLY the same steps with the same regexes while
+# recording, for every output character, the span of input characters that
+# produced it. to_model_text() above is deliberately left untouched: the model
+# was trained on its output. tests/test_textnorm_aligned.py asserts that both
+# paths produce identical text, and the server checks it again per request.
+
+Span = tuple[int, int]
+
+
+def _tsub(pattern: re.Pattern, repl, t: str, spans: list[Span]) -> tuple[str, list[Span]]:
+    """Tracked re.sub. `repl(m)` returns pieces (text, start, end) in the
+    coordinates of `t`. A piece that equals t[start:end] keeps its per-
+    character spans; any other piece maps every character to the union of
+    spans[start:end] (a replacement token covers the whole matched text)."""
+    out, out_spans, pos = [], [], 0
+    for m in pattern.finditer(t):
+        out.append(t[pos:m.start()])
+        out_spans.extend(spans[pos:m.start()])
+        for text, a, b in repl(m):
+            out.append(text)
+            if t[a:b] == text:
+                out_spans.extend(spans[a:b])
+            else:
+                covered = spans[a:b] or spans[max(a - 1, 0):a] or [(0, 0)]
+                union = (min(s for s, _ in covered), max(e for _, e in covered))
+                out_spans.extend([union] * len(text))
+        pos = m.end()
+    out.append(t[pos:])
+    out_spans.extend(spans[pos:])
+    return "".join(out), out_spans
+
+
+def _const(token: str):
+    return lambda m: [(token, m.start(), m.end())]
+
+
+def _nfc_tracked(text: str) -> tuple[str, list[Span], bool]:
+    """NFC per cluster (a base character plus following combining marks).
+    If that ever differs from whole-string NFC (e.g. Hangul jamo), fall back
+    to mapping every character to the whole input and report exact=False, so
+    the server omits attributions instead of highlighting the whole message."""
+    out, spans, i = [], [], 0
+    while i < len(text):
+        j = i + 1
+        while j < len(text) and unicodedata.combining(text[j]):
+            j += 1
+        piece = unicodedata.normalize("NFC", text[i:j])
+        out.append(piece)
+        spans.extend([(i, j)] * len(piece) if len(piece) != j - i else [(k, k + 1) for k in range(i, j)])
+        i = j
+    t = "".join(out)
+    whole = unicodedata.normalize("NFC", text)
+    if t != whole:
+        return whole, [(0, len(text))] * len(whole), False
+    return t, spans, True
+
+
+def _normalize_tracked(text: str) -> tuple[str, list[Span], bool]:
+    """Mirror of normalize(). The bool is False if the NFC fallback fired."""
+    t, spans, exact = _nfc_tracked(str(text))
+    for lit, rep in (("\\r\\n", "\n"), ("\\n", "\n"), ("\\t", " ")):
+        t, spans = _tsub(re.compile(re.escape(lit)), _const(rep), t, spans)
+    t, spans = _tsub(_CONTROL_RE, _const(" "), t, spans)
+    t, spans = _tsub(re.compile(r"[ \t ]+"), _const(" "), t, spans)
+    t, spans = _tsub(re.compile(r"\n\s*\n+"), _const("\n"), t, spans)
+    left = len(t) - len(t.lstrip())
+    right = len(t.rstrip())
+    return t[left:right], spans[left:right], exact
+
+
+def _link_pieces(m: re.Match):
+    """Mirror of _link_sub()."""
+    u = m.group(0)
+    core = u.rstrip(_TRAILING_PUNCT)
+    if not core:
+        return [(u, m.start(), m.end())]
+    cut = m.start() + len(core)
+    return [(LINK_TOKEN, m.start(), cut), (u[len(core):], cut, m.end())]
+
+
+def _otp_pieces(m: re.Match):
+    """Mirror of the OTP lambda in mask_pii()."""
+    return [(m.group(1), m.start(1), m.end(1)), (m.group(2), m.start(2), m.end(2)),
+            ("[OTP]", m.start(3), m.end(3))]
+
+
+def to_model_text_aligned(text: str) -> tuple[str, list[str], list[Span], bool]:
+    """Same output as to_model_text(), plus spans[i] = (start, end) of the
+    input characters (Python code points) that produced model_text[i], and
+    `exact` (False if the NFC fallback fired and the spans are coarse)."""
+    t, spans, exact = _normalize_tracked(text)
+    t, spans = _tsub(EMAIL_RE, _const("[EMAIL]"), t, spans)
+    urls = extract_urls(t)
+    t, spans = _tsub(URL_RE, _link_pieces, t, spans)
+    # mask_pii(), step by step
+    t, spans = _tsub(EMAIL_RE, _const("[EMAIL]"), t, spans)
+    t, spans = _tsub(PHONE_RE, _const("[PHONE_NUM]"), t, spans)
+    t, spans = _tsub(OTP_RE, _otp_pieces, t, spans)
+    t, spans = _tsub(AMOUNT_RE, _const("[AMOUNT]"), t, spans)
+    t, spans = _tsub(REF_RE, _const("[REF]"), t, spans)
+    return t, urls, spans, exact
+
+
+def source_span(spans: list[Span], start: int, end: int) -> Span:
+    """Map a [start, end) span of model text back to the input text."""
+    covered = spans[start:end]
+    return min(s for s, _ in covered), max(e for _, e in covered)

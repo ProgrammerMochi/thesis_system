@@ -19,3 +19,5 @@ android/app/build/
 android/local.properties
 *.apk
 models/
+# macOS Finder metadata
+.DS_Store
