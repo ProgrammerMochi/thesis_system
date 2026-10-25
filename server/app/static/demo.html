@@ -50,6 +50,10 @@
   td.num { text-align: right; font-variant-numeric: tabular-nums; }
   .hidden { display: none; }
   .error { color: var(--mal); }
+  .link { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .link:first-of-type { border-top: 0; padding-top: 0; }
+  .link code { word-break: break-all; font-size: 15px; }
+  .fusion { font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -87,8 +91,17 @@
     <p class="muted" id="basis"></p>
   </div>
 
+  <div class="card hidden" id="links">
+    <strong>Link analysis (lexical URL model)</strong>
+    <p class="muted fusion" id="fusionline"></p>
+    <div id="linklist"></div>
+    <p class="muted">Each link is scored from its characters only (length, hyphens, digits, subdomains, domain
+      ending, shortener, https, words like verify/login). Links are never opened. Prototype: the URL model was
+      trained on message-level labels; URL-level ground truth is in progress.</p>
+  </div>
+
   <div class="card hidden" id="explain">
-    <strong>Why: words that drove the decision</strong>
+    <strong>Explainable AI (SHAP): words that drove the decision</strong>
     <p class="muted" id="explainstatus"></p>
     <div class="message" id="message"></div>
     <div class="legend">
@@ -148,9 +161,54 @@ function showVerdict(res) {
     c.className = "chip"; c.textContent = `⚠ ${FLAG_TEXT[f] || f}`;
     return c;
   }));
+  const s = res.scores;
+  if (s.p_url !== null && s.p_url !== undefined) {
+    $("prob").textContent += ` · text model ${(s.p_text * 100).toFixed(1)}% · riskiest link ${(s.p_url * 100).toFixed(1)}%`;
+  }
   $("basis").textContent = res.decision.basis === "stub_fixed_response"
     ? "Stub mode: this is a fixed sample answer, not a prediction."
-    : "Prototype: verdict from the text model only. URL scoring and fusion are in progress (Increment 2).";
+    : s.w === null || s.w === undefined
+      ? "Prototype: verdict from the text model only (URL model files not loaded)."
+      : "Prototype: final score = w × text + (1 − w) × link, with w tuned on validation. Threshold "
+        + (res.decision.basis.includes("threshold_val_tuned") ? "tuned on validation." : "fixed at 50% (provisional).");
+}
+
+// A link contribution is in log-odds: how far that feature moved the link's score.
+function showLinks(text, res) {
+  const links = res.url_analysis || [];
+  const s = res.scores;
+  if (!links.length) { $("links").classList.add("hidden"); return; }
+  $("links").classList.remove("hidden");
+  const w = s.w;
+  $("fusionline").textContent = w === null || w === undefined ? "" :
+    `S = ${w.toFixed(2)} × ${(s.p_text * 100).toFixed(1)}% (text) + ${(1 - w).toFixed(2)} × `
+    + `${(s.p_url * 100).toFixed(1)}% (link) = ${(s.fused * 100).toFixed(1)}%`
+    + (w === 1 ? ". On validation, adding the link score did not beat the text model alone, so the tuning gave"
+      + " the link weight 0 (w = 1.00). The link score is shown for transparency; it does not change the verdict." : "");
+  $("linklist").replaceChildren(...links.map((l) => {
+    const div = document.createElement("div"); div.className = "link";
+    const head = document.createElement("div");
+    const code = document.createElement("code");
+    // Offsets are UTF-16 units into the text this page sent.
+    code.textContent = l.start === null ? "(link)" : text.slice(l.start, l.end);
+    const risk = document.createElement("strong");
+    risk.style.color = l.p_url >= 0.5 ? "var(--mal)" : "var(--leg)";
+    risk.textContent = ` ${(l.p_url * 100).toFixed(1)}% risky`;
+    head.append(code, risk);
+    const chips = document.createElement("div"); chips.className = "chips";
+    chips.append(...l.flags.map((f) => {
+      const c = document.createElement("span"); c.className = "chip"; c.textContent = `⚠ ${FLAG_TEXT[f] || f}`; return c;
+    }));
+    const tbl = document.createElement("table");
+    tbl.append(...l.top_features.map((f) => {
+      const tr = document.createElement("tr");
+      const a = document.createElement("td"); a.textContent = f.label;
+      const b = document.createElement("td"); b.className = "num";
+      b.textContent = `${f.contribution > 0 ? "raises" : "lowers"} risk (${f.contribution > 0 ? "+" : "−"}${Math.abs(f.contribution).toFixed(2)})`;
+      tr.append(a, b); return tr;
+    }));
+    div.append(head, chips, tbl); return div;
+  }));
 }
 
 // A SHAP weight is a share of the probability: 0.12 = 12 percentage points.
@@ -203,7 +261,7 @@ async function check() {
   if (controller) controller.abort();
   controller = new AbortController();
   $("status").className = "muted"; $("status").textContent = "Checking…";
-  $("explain").classList.add("hidden"); $("timing").textContent = "";
+  $("explain").classList.add("hidden"); $("links").classList.add("hidden"); $("timing").textContent = "";
   const t0 = performance.now();
   try {
     // Same two-call flow as the Android app: verdict first, highlights second.
@@ -211,6 +269,7 @@ async function check() {
     if (mine !== run) return;
     const tVerdict = performance.now() - t0;
     showVerdict(verdict);
+    showLinks(text, verdict);
     $("status").textContent = "";
     $("explain").classList.remove("hidden");
     $("explainstatus").textContent = "Working out which words mattered…";
@@ -231,7 +290,7 @@ $("text").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaK
 $("clear").addEventListener("click", () => {
   run++; if (controller) controller.abort();
   $("text").value = ""; $("status").textContent = ""; $("timing").textContent = "";
-  $("result").classList.add("hidden"); $("explain").classList.add("hidden");
+  $("result").classList.add("hidden"); $("explain").classList.add("hidden"); $("links").classList.add("hidden");
 });
 document.querySelectorAll("[data-ex]").forEach((b) =>
   b.addEventListener("click", () => { $("text").value = EXAMPLES[+b.dataset.ex]; check(); }));
