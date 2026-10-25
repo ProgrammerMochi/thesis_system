@@ -8,10 +8,11 @@ Run from the repo root (see server/README.md):
 import logging
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from server.app.engine import build_engine
@@ -21,6 +22,7 @@ from server.config import Settings
 
 log = logging.getLogger("smishing.server")
 MAX_BODY_BYTES = 64 * 1024
+DEMO_PAGE = Path(__file__).with_name("static") / "demo.html"
 
 # Libraries must not print inputs into logs (zero retention, Section 3.5.3).
 for name in ("transformers", "shap", "urllib3", "filelock"):
@@ -66,6 +68,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.exception_handler(StarletteHTTPException)
     async def http_error(request: Request, exc: StarletteHTTPException):
         return JSONResponse({"error": "http_error", "status": exc.status_code}, status_code=exc.status_code)
+
+    if settings.demo_page:
+        demo_html = DEMO_PAGE.read_text(encoding="utf-8")
+
+        @app.get("/", include_in_schema=False)
+        def root():
+            return RedirectResponse("/demo")
+
+        @app.get("/demo", include_in_schema=False)
+        def demo():
+            # Static viewer for the defense; it calls /v1/analyze like the phone does.
+            return HTMLResponse(demo_html, headers={"Cache-Control": "no-store"})
 
     @app.get("/healthz")
     def healthz():

@@ -7,6 +7,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MODEL_DIR = REPO_ROOT / "models" / "roberta_weighted_seed42"
+FUSION_DIR = REPO_ROOT / "models" / "url_fusion_v0"
 
 # Same truncation length the model was fine-tuned with (covers >99.9% of
 # train+val messages; see docs/PROJECT_CONTEXT.md, Section 1).
@@ -47,6 +48,14 @@ class Settings:
     shap_batch_size: int = 16
     torch_threads: int = 4
     warmup: bool = True
+    # Browser demo page at /demo (defense fallback for the Android client).
+    demo_page: bool = True
+    # URL model + fusion weight from ml/train_url_fusion.py. Missing files mean
+    # text-only. The fusion's validation-tuned threshold is applied only when
+    # use_tuned_threshold is set (SMISHING_USE_TUNED_THRESHOLD=1); until the
+    # group approves it, the verdict threshold stays at `threshold` (0.5).
+    fusion_dir: Path | None = FUSION_DIR
+    use_tuned_threshold: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -60,4 +69,8 @@ class Settings:
             shap_batch_size=int(env("SMISHING_SHAP_BATCH_SIZE", cls.shap_batch_size)),
             torch_threads=int(env("SMISHING_TORCH_THREADS", cls.torch_threads)),
             warmup=env("SMISHING_WARMUP", "1") != "0",
+            demo_page=env("SMISHING_DEMO_PAGE", "1") != "0",
+            fusion_dir=(None if env("SMISHING_FUSION_DIR", "") == "none"
+                        else Path(env("SMISHING_FUSION_DIR", str(FUSION_DIR)))),
+            use_tuned_threshold=env("SMISHING_USE_TUNED_THRESHOLD", "0") == "1",
         )
