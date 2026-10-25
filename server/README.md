@@ -48,3 +48,15 @@ never echo input (FastAPI's default 422 body does, so it is replaced).
 Reports process cold start, first-request cold start, and warm classification
 and SHAP times separately (median, p95, max). These are laptop demo numbers,
 not the SOP 5 result, which must be measured on the deployed Cloud Run setup.
+
+## SHAP budget sweep (validation only)
+
+    python -m server.bench.shap_budget_sweep            # all 381 validation messages, ~2-3 h
+    python -m server.bench.shap_budget_sweep --limit 10 --out results/shap_sweep_smoke
+
+Compares max_evals 32, 64, 128, 256 and 512 against a 2048 reference on
+validation messages (never test): Spearman correlation of word weights, top-3
+word overlap, deletion faithfulness, and SHAP latency. The selection rule was
+fixed in the script's docstring before any result was seen. Results go to
+`results/shap_sweep/` (msg_id and numbers only; not committed). The script
+never changes the server default.
