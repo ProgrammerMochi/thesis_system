@@ -25,7 +25,25 @@ class Attribution(BaseModel):
 
 class Scores(BaseModel):
     p_text: float
-    p_url: Optional[float] = None   # Increment 2
+    p_url: Optional[float] = None   # riskiest link; None when there is no link or no URL model
+    fused: Optional[float] = None   # S = w * p_text + (1 - w) * p_url (p_text when no link)
+    w: Optional[float] = None       # fusion weight tuned on validation; None = text-only
+
+
+class UrlFeature(BaseModel):
+    feature: str
+    label: str            # plain-language name
+    contribution: float   # log-odds added to this link's score
+
+
+class UrlAnalysis(BaseModel):
+    # UTF-16 offsets of the link in the text the phone sent (never the link
+    # text itself); None if the link could not be placed exactly.
+    start: Optional[int]
+    end: Optional[int]
+    p_url: float
+    flags: list[str]
+    top_features: list[UrlFeature]
 
 
 class Decision(BaseModel):
@@ -49,4 +67,5 @@ class AnalyzeResponse(BaseModel):
     scores: Scores
     decision: Decision
     explanation: ExplanationInfo
+    url_analysis: list[UrlAnalysis] = []
     model_version: str

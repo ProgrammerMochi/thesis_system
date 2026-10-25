@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from server.app.main import create_app
 from server.config import Settings
 
-SAME = ("verdict", "threat_probability", "scores", "decision", "url_flags", "model_version")
+SAME = ("verdict", "threat_probability", "scores", "decision", "url_flags", "url_analysis", "model_version")
 TEXTS = [
     "Your account is locked. Verify now at bit.ly/abc123 to avoid suspension.",
     "Hi Ma, nakarating na ako sa bahay. Kain na tayo mamaya.",
