@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smishing Detector Demo</title>
+<!-- Demo viewer for the defense (server/README.md). Self-contained: no CDN,
+     so it works over a phone hotspot with no internet. It keeps nothing:
+     no storage, no cookies; the text only goes to this server's API. -->
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --ink: #1b1f24; --muted: #5d6673; --line: #dde1e7;
+    --mal: #c62828; --mal-bg: 198, 40, 40; --leg: #2e7d32; --leg-bg: 46, 125, 50;
+    --accent: #1f5fbf; --chip: #fff3e0; --chip-ink: #8a4b00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111418; --card: #1a1f25; --ink: #e8ebef; --muted: #9aa4b1; --line: #2c333c;
+            --mal: #ef6b6b; --mal-bg: 239, 107, 107; --leg: #6cc070; --leg-bg: 108, 192, 112;
+            --accent: #6ea8ff; --chip: #3a2a14; --chip-ink: #ffc98a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 22px; margin: 0; }
+  .badge { font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-top: 16px; }
+  textarea { width: 100%; min-height: 120px; resize: vertical; font: inherit; color: inherit; background: transparent;
+             border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  button { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: inherit;
+           padding: 8px 14px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  .examples button { font-size: 14px; padding: 4px 10px; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .verdict { font-size: 28px; font-weight: 700; letter-spacing: .02em; }
+  .verdict.malicious { color: var(--mal); } .verdict.legitimate { color: var(--leg); }
+  .bar { height: 10px; border-radius: 5px; background: rgba(var(--leg-bg), .25); overflow: hidden; margin: 8px 0 4px; }
+  .bar > div { height: 100%; background: var(--mal); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .chip { background: var(--chip); color: var(--chip-ink); border-radius: 6px; padding: 2px 8px; font-size: 14px; }
+  .message { white-space: pre-wrap; word-break: break-word; font-size: 18px; line-height: 1.9; }
+  .message span.w { border-radius: 4px; padding: 1px 2px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 14px; color: var(--muted); margin-top: 10px; }
+  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; margin-top: 8px; }
+  td { padding: 4px 6px; border-top: 1px solid var(--line); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .hidden { display: none; }
+  .error { color: var(--mal); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Taglish smishing detector: prototype</h1>
+    <span class="badge" id="mode">connecting…</span>
+  </header>
+
+  <div class="card">
+    <label for="text" class="muted">Paste or type an SMS</label>
+    <textarea id="text" maxlength="1600" placeholder="e.g. Your account is on hold. Verify now at …"></textarea>
+    <div class="row">
+      <button class="primary" id="check">Check message</button>
+      <button id="clear">Clear</button>
+      <span class="muted" id="status"></span>
+    </div>
+    <div class="row examples">
+      <span class="muted">Examples:</span>
+      <button data-ex="0">Fake bank alert</button>
+      <button data-ex="1">Prize claim</button>
+      <button data-ex="2">Promo</button>
+      <button data-ex="3">Bank notice</button>
+      <button data-ex="4">Personal</button>
+    </div>
+    <p class="muted">In the app, phone numbers and OTPs are masked on the phone before sending. This page skips
+      that step, so use made-up messages. The server stores and logs no message text.</p>
+  </div>
+
+  <div class="card hidden" id="result">
+    <div class="verdict" id="verdict"></div>
+    <div class="bar"><div id="barfill"></div></div>
+    <div class="muted" id="prob"></div>
+    <div class="chips" id="flags"></div>
+    <p class="muted" id="basis"></p>
+  </div>
+
+  <div class="card hidden" id="explain">
+    <strong>Why: words that drove the decision</strong>
+    <p class="muted" id="explainstatus"></p>
+    <div class="message" id="message"></div>
+    <div class="legend">
+      <span><span class="sw" style="background: rgba(var(--mal-bg), .6)"></span>pushes toward malicious</span>
+      <span><span class="sw" style="background: rgba(var(--leg-bg), .6)"></span>pushes toward legitimate</span>
+      <span>darker = stronger · pts = percentage points of threat probability</span>
+    </div>
+    <table id="top"></table>
+  </div>
+
+  <p class="muted" id="timing"></p>
+</main>
+
+<script>
+"use strict";
+// Researcher-written examples (not from the corpus).
+const EXAMPLES = [
+  "BDO Alert: Your account is temporarily on hold due to unusual activity. Verify your details now at https://bdo-secure-verify.top/login to avoid suspension.",
+  "Congrats! Ikaw ay napili bilang winner ng P25,000 cash prize sa aming raffle. I-claim na bago mag-expire: bit.ly/claim-premyo",
+  "SALE ngayong weekend lang! Up to 70% off sa lahat ng shoes at bags. Visit our store sa SM Megamall, 3rd floor. Reply STOP to opt out.",
+  "BPI: Your credit card statement for October is now available. Total amount due is due on Nov 15. Para sa tanong, tumawag sa aming hotline.",
+  "Ma, nakauwi na ako. Kain na lang tayo mamaya pagdating ni Papa, may dala akong pansit.",
+];
+const FLAG_TEXT = {
+  ip_host: "link uses a raw IP address", shortener_domain: "shortened link", punycode_host: "look-alike (punycode) domain",
+  at_in_url: "“@” inside the link", no_https: "link is not https", nonstandard_port: "unusual port in link",
+  malformed_url: "malformed link",
+};
+const $ = (id) => document.getElementById(id);
+let run = 0;            // ignores answers from an older click
+let controller = null;
+
+fetch("/v1/meta").then((r) => r.json()).then((m) => {
+  $("mode").textContent = m.mode === "stub" ? "STUB mode: fixed fake answers"
+    : `model: ${m.model_version} · SHAP budget ${m.shap ? m.shap.max_evals : "?"}`;
+}).catch(() => { $("mode").textContent = "server not reachable"; });
+
+async function analyze(text, explain, signal) {
+  const r = await fetch(`/v1/analyze?explain=${explain}`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text }), signal,
+  });
+  if (!r.ok) throw new Error(r.status === 422 ? "message is empty or too long (max 1600 characters)" : `server error ${r.status}`);
+  return r.json();
+}
+
+function showVerdict(res) {
+  const p = res.threat_probability;
+  $("result").classList.remove("hidden");
+  $("verdict").textContent = res.verdict.toUpperCase();
+  $("verdict").className = `verdict ${res.verdict}`;
+  $("barfill").style.width = `${(p * 100).toFixed(1)}%`;
+  $("prob").textContent = `Threat probability ${(p * 100).toFixed(1)}% (threshold ${(res.decision.threshold * 100).toFixed(0)}%)`;
+  const flags = $("flags");
+  flags.replaceChildren(...res.url_flags.map((f) => {
+    const c = document.createElement("span");
+    c.className = "chip"; c.textContent = `⚠ ${FLAG_TEXT[f] || f}`;
+    return c;
+  }));
+  $("basis").textContent = res.decision.basis === "stub_fixed_response"
+    ? "Stub mode: this is a fixed sample answer, not a prediction."
+    : "Prototype: verdict from the text model only. URL scoring and fusion are in progress (Increment 2).";
+}
+
+// A SHAP weight is a share of the probability: 0.12 = 12 percentage points.
+function pts(w) {
+  const v = Math.abs(w) * 100;
+  return `${w > 0 ? "+" : "−"}${v.toFixed(v < 0.1 ? 2 : 1)} pts`;
+}
+
+function showExplanation(text, res) {
+  const box = $("message");
+  const atts = res.text_attributions.slice().sort((a, b) => a.start - b.start);
+  if (!res.explanation.computed) {
+    $("explainstatus").textContent = "No highlights for this message (its text could not be mapped exactly).";
+    box.textContent = text; $("top").replaceChildren(); return;
+  }
+  const max = Math.max(1e-9, ...atts.map((a) => Math.abs(a.weight)));
+  // Offsets are UTF-16 units, which is how JavaScript indexes strings.
+  const parts = []; let pos = 0;
+  for (const a of atts) {
+    if (a.start < pos) continue;
+    const rel = Math.abs(a.weight) / max;
+    if (rel < 0.05) continue;   // too small to matter: leave the word plain
+    if (a.start > pos) parts.push(document.createTextNode(text.slice(pos, a.start)));
+    const s = document.createElement("span");
+    const alpha = 0.15 + 0.65 * rel;
+    s.className = "w";
+    s.style.background = `rgba(var(${a.weight > 0 ? "--mal-bg" : "--leg-bg"}), ${alpha.toFixed(2)})`;
+    s.title = `${pts(a.weight)} toward ${a.weight > 0 ? "malicious" : "legitimate"}`;
+    s.textContent = text.slice(a.start, a.end);
+    parts.push(s); pos = a.end;
+  }
+  parts.push(document.createTextNode(text.slice(pos)));
+  box.replaceChildren(...parts);
+  $("explainstatus").textContent = !atts.length ? "No single word moved the score noticeably."
+    : res.explanation.truncated ? "Long message: only the first 256 tokens were read." : "";
+  const top = res.text_attributions.slice(0, 5).map((a) => {
+    const tr = document.createElement("tr");
+    const w = document.createElement("td"); w.textContent = text.slice(a.start, a.end);
+    const d = document.createElement("td"); d.className = "num";
+    d.textContent = `${pts(a.weight)} ${a.weight > 0 ? "→ malicious" : "→ legitimate"}`;
+    tr.append(w, d); return tr;
+  });
+  $("top").replaceChildren(...top);
+}
+
+async function check() {
+  const text = $("text").value;
+  if (!text.trim()) { $("status").textContent = "Type a message first."; return; }
+  const mine = ++run;
+  if (controller) controller.abort();
+  controller = new AbortController();
+  $("status").className = "muted"; $("status").textContent = "Checking…";
+  $("explain").classList.add("hidden"); $("timing").textContent = "";
+  const t0 = performance.now();
+  try {
+    // Same two-call flow as the Android app: verdict first, highlights second.
+    const verdict = await analyze(text, false, controller.signal);
+    if (mine !== run) return;
+    const tVerdict = performance.now() - t0;
+    showVerdict(verdict);
+    $("status").textContent = "";
+    $("explain").classList.remove("hidden");
+    $("explainstatus").textContent = "Working out which words mattered…";
+    $("message").textContent = text; $("top").replaceChildren();
+    const full = await analyze(text, true, controller.signal);
+    if (mine !== run) return;
+    const tAll = performance.now() - t0;
+    showExplanation(text, full);
+    $("timing").textContent = `Verdict in ${(tVerdict / 1000).toFixed(2)} s · highlights in ${(tAll / 1000).toFixed(1)} s (this laptop)`;
+  } catch (e) {
+    if (e.name === "AbortError" || mine !== run) return;
+    $("status").className = "error"; $("status").textContent = e.message;
+  }
+}
+
+$("check").addEventListener("click", check);
+$("text").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) check(); });
+$("clear").addEventListener("click", () => {
+  run++; if (controller) controller.abort();
+  $("text").value = ""; $("status").textContent = ""; $("timing").textContent = "";
+  $("result").classList.add("hidden"); $("explain").classList.add("hidden");
+});
+document.querySelectorAll("[data-ex]").forEach((b) =>
+  b.addEventListener("click", () => { $("text").value = EXAMPLES[+b.dataset.ex]; check(); }));
+</script>
+</body>
+</html>

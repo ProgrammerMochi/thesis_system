@@ -46,6 +46,8 @@ class Settings:
     shap_batch_size: int = 16
     torch_threads: int = 4
     warmup: bool = True
+    # Browser demo page at /demo (defense fallback for the Android client).
+    demo_page: bool = True
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -59,4 +61,5 @@ class Settings:
             shap_batch_size=int(env("SMISHING_SHAP_BATCH_SIZE", cls.shap_batch_size)),
             torch_threads=int(env("SMISHING_TORCH_THREADS", cls.torch_threads)),
             warmup=env("SMISHING_WARMUP", "1") != "0",
+            demo_page=env("SMISHING_DEMO_PAGE", "1") != "0",
         )
