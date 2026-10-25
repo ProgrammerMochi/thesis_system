@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug only (see src/debug/AndroidManifest.xml). The laptop's address on
+     a hotspot changes from session to session, so cleartext cannot be pinned
+     to one domain; it is allowed for the debug build as a whole. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

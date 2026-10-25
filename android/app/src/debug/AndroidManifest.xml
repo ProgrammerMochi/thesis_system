@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DEBUG BUILDS ONLY. The defense demo talks to FastAPI on a laptop over
+     plain HTTP (local Wi-Fi or hotspot). Release builds do not get this file,
+     so they refuse cleartext and need the HTTPS Cloud Run server (UAT). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:networkSecurityConfig="@xml/network_security_config" />
+</manifest>
