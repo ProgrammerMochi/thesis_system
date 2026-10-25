@@ -61,6 +61,7 @@ def word_spans(model_text: str) -> list[tuple[int, int]]:
 class WordExplainer:
     def __init__(self, predict_proba: Callable[[list[str]], np.ndarray], mask_token: str,
                  max_evals: int, batch_size: int):
+        self.predict_proba = predict_proba
         self.max_evals = max_evals
         self.batch_size = batch_size
         self.masker = WordMasker(mask_token)
@@ -71,6 +72,12 @@ class WordExplainer:
         spans = word_spans(model_text)
         if not spans:
             return Explanation([], [], 0.0)
+        if len(spans) == 1:
+            # shap's text clustering fails on a single unit. With one word the
+            # Shapley value is exact: f(text) - f(masked), no sampling needed.
+            masked = str(self.masker(np.array([False]), model_text)[0][0])
+            p, base = (float(x) for x in self.predict_proba([model_text, masked]))
+            return Explanation(spans, [p - base], base)
         out = self.explainer([model_text], max_evals=self.max_evals,
                              batch_size=self.batch_size, silent=True)
         values = np.asarray(out.values[0], dtype=float).reshape(-1)

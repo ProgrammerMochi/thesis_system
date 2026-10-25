@@ -80,8 +80,8 @@ from call 1 and shows it without highlights.
 ## Settings (environment variables)
 
 `SMISHING_MODE` (real/stub), `SMISHING_MODEL_DIR`, `SMISHING_THRESHOLD` (0.5),
-`SMISHING_MAX_CHARS` (1600), `SMISHING_SHAP_MAX_EVALS` (256, provisional until the
-validation sweep), `SMISHING_SHAP_BATCH_SIZE` (16), `SMISHING_TORCH_THREADS` (4),
+`SMISHING_MAX_CHARS` (1600), `SMISHING_SHAP_MAX_EVALS` (256; see the sweep below),
+`SMISHING_SHAP_BATCH_SIZE` (16), `SMISHING_TORCH_THREADS` (4),
 `SMISHING_WARMUP` (1; set 0 to measure cold start), `SMISHING_DEMO_PAGE` (1),
 `SMISHING_FUSION_DIR` (`models/url_fusion_v0`; `none` = text-only), `SMISHING_USE_TUNED_THRESHOLD` (0),
 `SMISHING_HOST`, `SMISHING_PORT`.
@@ -100,3 +100,15 @@ Reports process cold start, first-request cold start, and the two headline
 numbers of the two-call flow: **time to verdict** (`explain=false`) and
 **time to highlights** (`explain=true`), each as median, p95 and max. These are laptop demo numbers,
 not the SOP 5 result, which must be measured on the deployed Cloud Run setup.
+
+## SHAP budget sweep (validation only)
+
+    python -m server.bench.shap_budget_sweep            # all 381 validation messages, ~2-3 h
+    python -m server.bench.shap_budget_sweep --limit 10 --out results/shap_sweep_smoke
+
+Compares max_evals 32, 64, 128, 256 and 512 against a 2048 reference on
+validation messages (never test): Spearman correlation of word weights, top-3
+word overlap, deletion faithfulness, and SHAP latency. The selection rule was
+fixed in the script's docstring before any result was seen. Results go to
+`results/shap_sweep/` (msg_id and numbers only; not committed). The script
+never changes the server default.

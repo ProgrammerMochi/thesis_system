@@ -41,8 +41,9 @@ class Settings:
     decision_basis: str = "p_text_only_provisional"
     # About ten concatenated SMS. Longer requests are rejected with 422.
     max_chars: int = 1600
-    # SHAP evaluation budget. Provisional until the validation sweep in the
-    # design doc (Section 4) picks it; recorded in /v1/meta.
+    # SHAP evaluation budget, recorded in /v1/meta. The validation sweep
+    # (server/bench/shap_budget_sweep.py, 2026-10-25) found no budget meeting
+    # its pre-set rule, so 256 stays, as the rule specifies (group decision).
     shap_max_evals: int = 256
     shap_batch_size: int = 16
     torch_threads: int = 4

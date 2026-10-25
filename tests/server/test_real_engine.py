@@ -76,3 +76,15 @@ def test_nfc_fallback_omits_attributions(client):
 def test_malformed_url_does_not_500(client):
     r = client.post("/v1/analyze", json={"text": "Login at http://[secure].bdo.com now"})
     assert r.status_code == 200 and "malformed_url" in r.json()["url_flags"]
+
+
+@pytest.mark.parametrize("text", ["Ok", "  Ok!  ", "https://bit.ly/x", "Ok po", "Salamat po Ma"])
+def test_very_short_messages_get_highlights(client, text):
+    """shap's text clustering fails on one word; the explainer computes that
+    case exactly (f(text) - f(<mask>)) instead of returning a 500."""
+    r = client.post("/v1/analyze", json={"text": text})
+    assert r.status_code == 200
+    body = AnalyzeResponse.model_validate(r.json())
+    assert body.explanation.computed
+    total = body.explanation.base_value + sum(a.weight for a in body.text_attributions)
+    assert abs(total - body.scores.p_text) < 0.01
