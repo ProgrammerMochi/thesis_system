@@ -15,6 +15,16 @@ Run every command from the repo root with the venv active (`source .venv/bin/act
 The server listens on port 8000 on all interfaces, so a phone on the same Wi-Fi
 can reach `http://<laptop-ip>:8000`. One worker, no access log.
 
+## Demo page (for the defense)
+
+Start the server, then open `http://localhost:8000/` (or `http://<laptop-ip>:8000/`
+from a phone on the same Wi-Fi). Paste a message, or click an example, and the
+page shows the verdict first, then colours the words that pushed it toward
+malicious (red) or legitimate (green). It uses the same two calls as the
+Android app and loads nothing from the internet, so it works on a hotspot. It
+does not mask phone numbers or OTPs the way the app will, so demo with made-up
+messages only. Turn it off with `SMISHING_DEMO_PAGE=0` (for example on Cloud Run).
+
 ## Endpoints
 
 - `POST /v1/analyze` with `{"text": "..."}` (the text the phone already masked). Add `?explain=false` to skip SHAP.
@@ -53,7 +63,7 @@ validation-selected threshold and URL fusion come in Increment 2.
 `SMISHING_MODE` (real/stub), `SMISHING_MODEL_DIR`, `SMISHING_THRESHOLD` (0.5),
 `SMISHING_MAX_CHARS` (1600), `SMISHING_SHAP_MAX_EVALS` (256, provisional until the
 validation sweep), `SMISHING_SHAP_BATCH_SIZE` (16), `SMISHING_TORCH_THREADS` (4),
-`SMISHING_WARMUP` (1; set 0 to measure cold start), `SMISHING_HOST`, `SMISHING_PORT`.
+`SMISHING_WARMUP` (1; set 0 to measure cold start), `SMISHING_DEMO_PAGE` (1), `SMISHING_HOST`, `SMISHING_PORT`.
 
 ## Zero retention
 
