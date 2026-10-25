@@ -330,6 +330,7 @@ def main(argv=None):
     ap.add_argument("--expected-n", type=int, default=EXPECTED_VAL_N)
     ap.add_argument("--skip-ref-check", action="store_true")
     args = ap.parse_args(argv)
+    sys.stdout.reconfigure(line_buffering=True)   # progress shows up in a redirected log
 
     from server.config import Settings
     from server.app.engine import RealEngine
