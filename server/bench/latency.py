@@ -4,7 +4,9 @@ Measures, per Chapter 3 (Section 3.3.3), classification and SHAP separately
 and cold start apart from warm requests:
   - process cold start: server launch -> /readyz 200
   - first-request cold start: first /v1/analyze with SMISHING_WARMUP=0
-  - warm requests: N per message with ?explain=false and with SHAP
+  - warm requests: N two-call pairs per message, as the app does them:
+    call 1 ?explain=false (time to verdict), then call 2 with SHAP;
+    time to highlights = call 1 + call 2
 Server stage times come from the Server-Timing header. The CSV holds numbers
 only (message index, never text).
 
@@ -56,12 +58,12 @@ def wait_ready(base, timeout=300):
     raise SystemExit("server did not become ready")
 
 
-def summarize(rows, kind, key):
+def summarize(rows, kind, key, label=None):
     vals = sorted(r[key] for r in rows if r["kind"] == kind and r.get(key) is not None)
     if not vals:
         return
     p95 = vals[min(len(vals) - 1, int(round(0.95 * (len(vals) - 1))))]
-    print(f"{kind:14s} {key:12s} n={len(vals):4d} median={statistics.median(vals):8.1f} "
+    print(f"{label or kind + ' ' + key:30s} n={len(vals):4d} median={statistics.median(vals):8.1f} "
           f"p95={p95:8.1f} max={vals[-1]:8.1f} ms")
 
 
@@ -85,12 +87,15 @@ def main():
             if run == 0:
                 with urllib.request.urlopen(f"{base}/v1/meta") as r:
                     meta = json.loads(r.read())
-                for explain in (False, True):
-                    for i, m in enumerate(MESSAGES):
-                        for _ in range(a.warm):
-                            ms, st = post(base, m, explain)
-                            rows.append({"run": run, "kind": "warm_shap" if explain else "warm_classify",
-                                         "msg": i, "client_ms": ms, **st})
+                # The app's two-call flow: call 1 (explain=false) then call 2
+                # (explain=true) with the same text, back to back.
+                for i, m in enumerate(MESSAGES):
+                    for _ in range(a.warm):
+                        ms1, st1 = post(base, m, False)
+                        ms2, st2 = post(base, m, True)
+                        rows.append({"run": run, "kind": "warm_classify", "msg": i, "client_ms": ms1, **st1})
+                        rows.append({"run": run, "kind": "warm_shap", "msg": i, "client_ms": ms2, **st2})
+                        rows.append({"run": run, "kind": "two_call", "msg": i, "client_ms": ms1 + ms2})
         finally:
             proc.terminate()
             proc.wait()
@@ -100,6 +105,11 @@ def main():
         w.writeheader()
         w.writerows(rows)
     print("meta:", json.dumps({k: meta.get(k) for k in ("model_version", "torch_threads", "shap", "versions")}))
+    print("== headline (warm, client-side, laptop only; network and phone not included) ==")
+    summarize(rows, "warm_classify", "client_ms", "TIME TO VERDICT (call 1)")
+    summarize(rows, "two_call", "client_ms", "TIME TO HIGHLIGHTS (call 1+2)")
+    summarize(rows, "warm_shap", "client_ms", "  of which call 2 alone")
+    print("== detail ==")
     summarize(rows, "process_cold", "client_ms")
     for kind in ("first_request", "warm_classify", "warm_shap"):
         for key in ("client_ms", "classify", "shap", "total"):
