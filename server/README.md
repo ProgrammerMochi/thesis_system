@@ -31,8 +31,7 @@ validation-selected threshold and URL fusion come in Increment 2.
 ## Settings (environment variables)
 
 `SMISHING_MODE` (real/stub), `SMISHING_MODEL_DIR`, `SMISHING_THRESHOLD` (0.5),
-`SMISHING_MAX_CHARS` (1600), `SMISHING_SHAP_MAX_EVALS` (256, provisional until the
-validation sweep), `SMISHING_SHAP_BATCH_SIZE` (16), `SMISHING_TORCH_THREADS` (4),
+`SMISHING_MAX_CHARS` (1600), `SMISHING_SHAP_MAX_EVALS` (256; see the sweep below), `SMISHING_SHAP_BATCH_SIZE` (16), `SMISHING_TORCH_THREADS` (4),
 `SMISHING_WARMUP` (1; set 0 to measure cold start), `SMISHING_HOST`, `SMISHING_PORT`.
 
 ## Zero retention
